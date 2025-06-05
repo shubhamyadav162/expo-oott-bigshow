@@ -28,8 +28,22 @@ jobs:
         working-directory: android
         run: ./gradlew assembleRelease
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v2
-        with:
-          name: app-release.apk
-          path: android/app/build/outputs/apk/release/app-release.apk 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Create GitHub Release
+        id: create_release
+        run: |
+          TAG="ci-${{ github.run_id }}"
+          BODY="Release for run ${{ github.run_id }}"
+          RESPONSE=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Content-Type: application/json" \
+            -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"body\":\"$BODY\",\"draft\":false,\"prerelease\":false}" \
+            https://api.github.com/repos/${{ github.repository }}/releases)
+          echo "release_id=$(echo "$RESPONSE" | jq .id)" >> $GITHUB_OUTPUT
+
+      - name: Upload APK to Release Asset
+        run: |
+          RELEASE_ID=${{ steps.create_release.outputs.release_id }}
+          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" -H "Content-Type: application/vnd.android.package-archive" \
+            --data-binary @android/app/build/outputs/apk/release/app-release.apk \
+            "https://uploads.github.com/repos/${{ github.repository }}/releases/$RELEASE_ID/assets?name=app-release.apk" 
